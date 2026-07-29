@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tetris MARI</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        .contenedor {
+            text-align: center;
+            width: 100%;
+            max-width: 360px;
+        }
+
+        h1 {
+            color: #ff007f;
+            text-shadow: 0 0 10px #ff007f;
+            margin: 5px 0;
+            font-size: 32px;
+            letter-spacing: 3px;
+        }
+
+        canvas {
+            border: 4px solid #ff007f;
+            background: #000;
+            box-shadow: 0 0 20px #ff007f;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .informacion {
+            margin: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .btn-reiniciar {
+            background: #ff007f;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .btn-reiniciar:active {
+            background: white;
+            color: #000;
+        }
+
+        /* Controles táctiles optimizados para teléfono */
+        .panel-tactil {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .btn-tactil {
+            background: #222;
+            color: #00ffff;
+            border: 2px solid #00ffff;
+            border-radius: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            padding: 15px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+        }
+
+        .btn-tactil:active {
+            background: #00ffff;
+            color: #000;
+        }
+
+        .btn-bajar {
+            grid-column: span 3;
+            background: #ff007f;
+            color: #fff;
+            border-color: #ff007f;
+            box-shadow: 0 0 8px rgba(255, 0, 127, 0.4);
+        }
+
+        .btn-bajar:active {
+            background: #fff;
+            color: #000;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="contenedor">
+
+    <h1>MARI</h1>
+
+    <canvas id="juego" width="300" height="600"></canvas>
+
+    <div class="informacion">
+        Puntuación: <span id="puntuacion">0</span>
+    </div>
+
+    <button class="btn-reiniciar" onclick="reiniciarJuego()">REINICIAR</button>
+
+    <!-- Controles táctiles -->
+    <div class="panel-tactil">
+        <button class="btn-tactil" id="btn-izq">◄</button>
+        <button class="btn-tactil" id="btn-rotar">↻</button>
+        <button class="btn-tactil" id="btn-der">►</button>
+        <button class="btn-tactil btn-bajar" id="btn-abajo">▼ CAER</button>
+    </div>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("juego");
+const contexto = canvas.getContext("2d");
+
+const FILAS = 20;
+const COLUMNAS = 10;
+const TAMANO = 30;
+
+let tablero = [];
+let puntuacion = 0;
+let juegoTerminado = false;
+
+// Paleta de colores para las letras M - A - R - I
+const colores = [
+    null,
+    "#e6005c", // 1: M (Rosa intenso)
+    "#ffaa00", // 2: A (Naranja)
+    "#9900ff", // 3: R (Púrpura)
+    "#00ccff"  // 4: I (Cian)
+];
+
+// Nombres de las letras para dibujarlas dentro del bloque
+const letrasTexto = [
+    "",
+    "M",
+    "A",
+    "R",
+    "I"
+];
+
+// Figuras optimizadas para fácil identificación visual
+const piezasLetras = [
+    // 1: M (Diseño estilizado y reconocible)
+    [
+        [1, 0, 0, 1],
+        [1, 1, 1, 1],
+        [1, 0, 0, 1]
+    ],
+    // 2: A (Arco claro de letra A)
+    [
+        [0, 2, 0],
+        [2, 0, 2],
+        [2, 2, 2],
+        [2, 0, 2]
+    ],
+    // 3: R (Letra R bien definida)
+    [
+        [3, 3, 0],
+        [3, 0, 3],
+        [3, 3, 0],
+        [3, 0, 3]
+    ],
+    // 4: I (Palito recto tradicional)
+    [
+        [0, 0, 0, 0],
+        [4, 4, 4, 4],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0]
+    ]
+];
+
+let piezaActual = {
+    forma: null,
+    x: 0,
+    y: 0
+};
+
+function crearTablero() {
+    tablero = [];
+    for (let fila = 0; fila < FILAS; fila++) {
+        tablero[fila] = [];
+        for (let columna = 0; columna < COLUMNAS; columna++) {
+            tablero[fila][columna] = 0;
+        }
+    }
+}
+
+function dibujarBloque(x, y, color) {
+    const px = x * TAMANO;
+    const py = y * TAMANO;
+
+    // Fondo del bloque
+    contexto.fillStyle = colores[color];
+    contexto.fillRect(px, py, TAMANO, TAMANO);
+
+    // Borde del bloque
+    contexto.strokeStyle = "#111";
+    contexto.lineWidth = 2;
+    contexto.strokeRect(px, py, TAMANO, TAMANO);
+
+    // Texto de la letra dentro del bloque para fácil identificación
+    contexto.fillStyle = "#ffffff";
+    contexto.font = "bold 16px Arial";
+    contexto.textAlign = "center";
+    contexto.textBaseline = "middle";
+    contexto.fillText(letrasTexto[color], px + TAMANO / 2, py + TAMANO / 2);
+}
+
+function dibujarTablero() {
+    contexto.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (let fila = 0; fila < FILAS; fila++) {
+        for (let columna = 0; columna < COLUMNAS; columna++) {
+            if (tablero[fila][columna] !== 0) {
+                dibujarBloque(columna, fila, tablero[fila][columna]);
+            }
+        }
+    }
+
+    dibujarPieza();
+}
+
+function dibujarPieza() {
+    piezaActual.forma.forEach((fila, y) => {
+        fila.forEach((valor, x) => {
+            if (valor !== 0) {
+                dibujarBloque(
+                    piezaActual.x + x,
+                    piezaActual.y + y,
+                    valor
+                );
+            }
+        });
+    });
+}
+
+function crearPieza() {
+    // Selección aleatoria EXCLUSIVAMENTE entre M, A, R, I
+    const indice = Math.floor(Math.random() * piezasLetras.length);
+
+    piezaActual.forma = piezasLetras[indice].map(fila => [...fila]);
+    piezaActual.x = Math.floor(COLUMNAS / 2) - Math.floor(piezaActual.forma[0].length / 2);
+    piezaActual.y = 0;
+
+    if (colisiona()) {
+        juegoTerminado = true;
+        alert("GAME OVER\nPuntuación: " + puntuacion);
+    }
+}
+
+function colisiona() {
+    for (let y = 0; y < piezaActual.forma.length; y++) {
+        for (let x = 0; x < piezaActual.forma[y].length; x++) {
+            if (
+                piezaActual.forma[y][x] !== 0 &&
+                (
+                    tablero[piezaActual.y + y] === undefined ||
+                    tablero[piezaActual.y + y][piezaActual.x + x] === undefined ||
+                    tablero[piezaActual.y + y][piezaActual.x + x] !== 0
+                )
+            ) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function fijarPieza() {
+    piezaActual.forma.forEach((fila, y) => {
+        fila.forEach((valor, x) => {
+            if (valor !== 0) {
+                tablero[piezaActual.y + y][piezaActual.x + x] = valor;
+            }
+        });
+    });
+}
+
+function eliminarLineas() {
+    for (let y = FILAS - 1; y >= 0; y--) {
+        if (tablero[y].every(valor => valor !== 0)) {
+            tablero.splice(y, 1);
+            tablero.unshift(new Array(COLUMNAS).fill(0));
+            puntuacion += 100;
+            document.getElementById("puntuacion").textContent = puntuacion;
+            y++;
+        }
+    }
+}
+
+function bajarPieza() {
+    if (juegoTerminado) return;
+
+    piezaActual.y++;
+
+    if (colisiona()) {
+        piezaActual.y--;
+        fijarPieza();
+        eliminarLineas();
+        crearPieza();
+    }
+
+    dibujarTablero();
+}
+
+function moverPieza(direccion) {
+    if (juegoTerminado) return;
+    piezaActual.x += direccion;
+
+    if (colisiona()) {
+        piezaActual.x -= direccion;
+    }
+
+    dibujarTablero();
+}
+
+function rotarPieza() {
+    if (juegoTerminado) return;
+    const formaAnterior = piezaActual.forma;
+
+    piezaActual.forma = piezaActual.forma[0].map(
+        (_, index) => piezaActual.forma.map(fila => fila[index]).reverse()
+    );
+
+    if (colisiona()) {
+        piezaActual.forma = formaAnterior;
+    }
+
+    dibujarTablero();
+}
+
+// Control mediante teclado de PC
+document.addEventListener("keydown", function(event) {
+    if (event.key === "ArrowLeft") moverPieza(-1);
+    else if (event.key === "ArrowRight") moverPieza(1);
+    else if (event.key === "ArrowDown") bajarPieza();
+    else if (event.key === "ArrowUp") rotarPieza();
+});
+
+// Eventos táctiles para móviles
+function agregarControlTactil(id, accion) {
+    const el = document.getElementById(id);
+
+    el.addEventListener("touchstart", function(e) {
+        e.preventDefault();
+        accion();
+    }, { passive: false });
+
+    el.addEventListener("click", function(e) {
+        accion();
+    });
+}
+
+agregarControlTactil("btn-izq", () => moverPieza(-1));
+agregarControlTactil("btn-der", () => moverPieza(1));
+agregarControlTactil("btn-rotar", () => rotarPieza());
+agregarControlTactil("btn-abajo", () => bajarPieza());
+
+function reiniciarJuego() {
+    puntuacion = 0;
+    juegoTerminado = false;
+    document.getElementById("puntuacion").textContent = puntuacion;
+    crearTablero();
+    crearPieza();
+    dibujarTablero();
+}
+
+crearTablero();
+crearPieza();
+dibujarTablero();
+
+setInterval(bajarPieza, 800);
+
+</script>
+
+</body>
+</html>
